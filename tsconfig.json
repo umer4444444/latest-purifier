@@ -1,0 +1,16 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "types": ["react"],
+    "strict": true,
+    "jsx": "react-native",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@react-navigation/native-stack": ["node_modules/@react-navigation/native-stack/src"]
+    },
+    "typeRoots": ["./node_modules/@types", "./src/types"]
+  },
+  "include": ["src/**/*", "**/*.ts", "**/*.tsx", "services/AirQualityService.js"],
+  "exclude": ["node_modules"]
+}
