@@ -15,10 +15,11 @@ const DHT22Screen = () => {
       setTemperature(parseFloat(temp.toFixed(1)));
       setHumidity(parseFloat(hum.toFixed(1)));
     }, 3000);
-    
+
 
     return () => clearInterval(interval);
   }, []);
+  
 
   const getTempAdvice = () => {
     if (temperature > 28) return '🔴 Too hot! Start AC.';
