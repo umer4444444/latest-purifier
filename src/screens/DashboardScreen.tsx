@@ -328,6 +328,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+    marginTop:5,
   },
   roomText: {
     fontSize: 24,
@@ -500,6 +501,8 @@ const styles = StyleSheet.create({
   padding: 8,
   borderRadius: 20,
   backgroundColor: '#ffe6e6',
+  marginTop
+  :15,
 },
 
   filterStatusContainer: {

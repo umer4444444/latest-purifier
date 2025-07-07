@@ -58,7 +58,7 @@ const DHT22Screen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f8', padding: 16 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 16, textAlign: 'center',marginTop:25, },
   card: { marginBottom: 16 },
   value: { fontSize: 28, fontWeight: 'bold', marginVertical: 8 },
   bar: { height: 8, borderRadius: 4, marginVertical: 8 },
