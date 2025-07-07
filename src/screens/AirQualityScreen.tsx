@@ -11,15 +11,14 @@ const pollutantData = [
   { name: 'Smoke', value: 28 },
   { name: 'VOCs', value: 100 },
 ];
-
 const getAQIColor = (value: number) => {
-  if (value <= 50) return '#4CAF50'; // Good
-  if (value <= 100) return '#FFEB3B'; // Moderate
-  if (value <= 150) return '#FF9800'; // Unhealthy for Sensitive Groups
-  if (value <= 200) return '#F44336'; // Unhealthy
-  return '#B71C1C'; // Very Unhealthy
+  if (value <= 50) return '#00C853';       // Fresh Green (Good)
+  if (value <= 100) return '#FFD600';      // Amber (Moderate)
+  if (value <= 150) return '#FF6D00';      // Vivid Orange (Unhealthy for Sensitive Groups)
+  if (value <= 200) return '#D50000';      // Bright Red (Unhealthy)
+  if (value <= 300) return '#6A1B9A';      // Deep Purple (Very Unhealthy)
+  return '#3E2723';                        // Dark Brown (Hazardous)
 };
-
 const screenWidth = Dimensions.get('window').width;
 
 const generateChartData = () => ({
@@ -99,6 +98,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: 'bold',
+    marginTop:18,
     marginBottom: 16,
     color: '#333',
     textAlign: 'center',

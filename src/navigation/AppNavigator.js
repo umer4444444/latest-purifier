@@ -64,7 +64,6 @@ function MainTabs() {
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Comparison" component={AQIComparisonScreen} />
       <Tab.Screen name="AirQuality" component={AirQualityScreen} /> 
-
       <Tab.Screen name="DHT22" component={DHT22Screen} />
 
     </Tab.Navigator>

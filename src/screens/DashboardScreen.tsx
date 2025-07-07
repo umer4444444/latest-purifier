@@ -519,6 +519,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+    marginTop:5,
   },
   roomText: {
     fontSize: 24,
@@ -687,11 +688,12 @@ const styles = StyleSheet.create({
     color: '#2196F3',
   },
   logoutButton: {
-    marginRight: 15,
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#ffe6e6',
-  },
+  marginRight: 15,
+  padding: 8,
+  borderRadius: 20,
+  backgroundColor: '#ffe6e6',
+},
+
   filterStatusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
