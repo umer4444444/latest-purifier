@@ -14,56 +14,97 @@ import { ProgressBar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Snackbar } from 'react-native-paper';
-
-
+import { LineChart } from 'react-native-chart-kit';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 const { width } = Dimensions.get('window');
 
+// Mock data for trends
+const dailyData = {
+  labels: ["12AM", "3AM", "6AM", "9AM", "12PM", "3PM", "6PM", "9PM"],
+  datasets: [
+    {
+      data: [65, 78, 52, 89, 76, 68, 97, 110],
+      color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
+      strokeWidth: 2
+    }
+  ]
+};
+
+const weeklyData = {
+  labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  datasets: [
+    {
+      data: [85, 92, 78, 95, 87, 102, 89],
+      color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
+      strokeWidth: 2
+    }
+  ]
+};
+
+const monthlyData = {
+  labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
+  datasets: [
+    {
+      data: [88, 92, 85, 95],
+      color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
+      strokeWidth: 2
+    }
+  ]
+};
+
+// Mock event logs
+const eventLogs = [
+  { time: "2023-06-15 08:30", event: "AQI exceeded 150", level: "high" },
+  { time: "2023-06-14 19:45", event: "Filter replacement reminder", level: "medium" },
+  { time: "2023-06-13 12:15", event: "Auto mode activated", level: "low" },
+  { time: "2023-06-12 06:30", event: "Device turned on", level: "low" },
+  { time: "2023-06-10 22:10", event: "Fan speed increased to 100%", level: "medium" },
+];
 
 export default function DashboardScreen() {
   const [isOn, setIsOn] = React.useState(true);
   const [autoMode, setAutoMode] = React.useState(true);
   const [fanSpeed, setFanSpeed] = React.useState(0.6);
   const [notification, setNotification] = React.useState('');
-const [showNotification, setShowNotification] = React.useState(false);
-const [filterHealth, setFilterHealth] = React.useState(0.8);
+  const [showNotification, setShowNotification] = React.useState(false);
+  const [filterHealth, setFilterHealth] = React.useState(0.8);
+  const [activeTab, setActiveTab] = React.useState('daily'); // 'daily', 'weekly', 'monthly'
+  const [showLogs, setShowLogs] = React.useState(false);
 
-  
-  const navigation = useNavigation<any>(); // 👈 This bypasses the type error
+  const navigation = useNavigation<any>();
+  const [airQuality, setAirQuality] = React.useState({ aqi: 42, status: 'Excellent' });
 
+  const getAqiStatus = (aqi: number): string => {
+    if (aqi < 50) return 'Excellent';
+    if (aqi < 100) return 'Moderate';
+    if (aqi < 150) return 'Unhealthy';
+    return 'Hazardous';
+  };
 
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const newAqi = Math.floor(Math.random() * 200);
+      const status = getAqiStatus(newAqi);
+      setAirQuality({ aqi: newAqi, status });
 
- const [airQuality, setAirQuality] = React.useState({ aqi: 42, status: 'Excellent' });
+      if (newAqi >= 150) {
+        setNotification('⚠️ Air quality is hazardous. Please turn on the purifier!');
+        setShowNotification(true);
+      }
+    }, 5000);
 
-const getAqiStatus = (aqi: number): string => {
-  if (aqi < 50) return 'Excellent';
-  if (aqi < 100) return 'Moderate';
-  if (aqi < 150) return 'Unhealthy';
-  return 'Hazardous';
-};
+    return () => clearInterval(interval);
+  }, []);
 
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setFilterHealth(prev => Math.max(0, parseFloat((prev - 0.01).toFixed(2))));
+    }, 10000);
 
-React.useEffect(() => {
-  const interval = setInterval(() => {
-    const newAqi = Math.floor(Math.random() * 200); // Simulate AQI between 0 and 200
-    const status = getAqiStatus(newAqi);
-    setAirQuality({ aqi: newAqi, status });
-
-    if (newAqi >= 150) {
-      setNotification('⚠️ Air quality is hazardous. Please turn on the purifier!');
-      setShowNotification(true);
-    }
-  }, 5000);
-
-  return () => clearInterval(interval);
-}, []);
-React.useEffect(() => {
-  const interval = setInterval(() => {
-    setFilterHealth(prev => Math.max(0, parseFloat((prev - 0.01).toFixed(2))));
-  }, 10000); // every 10 seconds
-
-  return () => clearInterval(interval);
-}, []);
+    return () => clearInterval(interval);
+  }, []);
 
   // Animation Refs
   const spinValue = React.useRef(new Animated.Value(0)).current;
@@ -132,35 +173,76 @@ React.useEffect(() => {
 
   const aqiColor = getAqiColor(airQuality.aqi);
 
+  const exportLogs = async () => {
+    try {
+      const csvContent = eventLogs.map(log => 
+        `${log.time},${log.event},${log.level}`
+      ).join('\n');
+      
+      const fileUri = FileSystem.documentDirectory + 'air_quality_logs.csv';
+      await FileSystem.writeAsStringAsync(fileUri, 'Time,Event,Level\n' + csvContent);
+      
+      if (!(await Sharing.isAvailableAsync())) {
+        alert('Sharing not available on this platform');
+        return;
+      }
+      
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Export Air Quality Logs',
+        UTI: 'public.comma-separated-values-text'
+      });
+    } catch (error) {
+      console.error('Error exporting logs:', error);
+      setNotification('Failed to export logs');
+      setShowNotification(true);
+    }
+  };
+
+  const getEventColor = (level: string) => {
+    switch (level) {
+      case 'high': return '#F44336';
+      case 'medium': return '#FF9800';
+      default: return '#4CAF50';
+    }
+  };
+
+  const getActiveData = () => {
+    switch (activeTab) {
+      case 'daily': return dailyData;
+      case 'weekly': return weeklyData;
+      case 'monthly': return monthlyData;
+      default: return dailyData;
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer}>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-  <Text style={styles.roomText}>Living Room Air</Text>
-  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-    <TouchableOpacity
-      style={styles.logoutButton}
-     // In DashboardScreen.js, replace the logout button press handler with:
-onPress={() => navigation.reset({
-  index: 0,
-  routes: [{ name: 'Auth' }]
-})}
-    >
-      <MaterialCommunityIcons name="logout" size={22} color="#F44336" />
-    </TouchableOpacity>
-    <View style={styles.statusIndicator}>
-      <View
-        style={[
-          styles.statusDot,
-          { backgroundColor: isOn ? '#4CAF50' : '#F44336' },
-        ]}
-      />
-      <Text style={styles.statusText}>{isOn ? 'Active' : 'Inactive'}</Text>
-    </View>
-  </View>
-</View>
-
+          <Text style={styles.roomText}>Living Room Air</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={() => navigation.reset({
+                index: 0,
+                routes: [{ name: 'Auth' }]
+              })}
+            >
+              <MaterialCommunityIcons name="logout" size={22} color="#F44336" />
+            </TouchableOpacity>
+            <View style={styles.statusIndicator}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: isOn ? '#4CAF50' : '#F44336' },
+                ]}
+              />
+              <Text style={styles.statusText}>{isOn ? 'Active' : 'Inactive'}</Text>
+            </View>
+          </View>
+        </View>
 
         {/* AQI Visualization */}
         <View style={styles.aqiContainer}>
@@ -283,33 +365,142 @@ onPress={() => navigation.reset({
               <MaterialCommunityIcons name="air-filter" size={20} color="#4CAF50" />
               <Text style={styles.sectionLabel}>Filter Health</Text>
             </View>
-           <ProgressBar progress={filterHealth} color="#4CAF50" style={styles.progress} />
-<View style={styles.filterStatusContainer}>
-  <MaterialCommunityIcons name="heart-pulse" size={20} color="#4CAF50" />
-  <Text style={styles.filterStatus}>
-    Healthy – {Math.round(filterHealth * 100)}% remaining
-  </Text>
-</View>
-
+            <ProgressBar progress={filterHealth} color="#4CAF50" style={styles.progress} />
             <View style={styles.filterStatusContainer}>
-             
-              
+              <MaterialCommunityIcons name="heart-pulse" size={20} color="#4CAF50" />
+              <Text style={styles.filterStatus}>
+                Healthy – {Math.round(filterHealth * 100)}% remaining
+              </Text>
             </View>
+          </View>
+
+          {/* Trends Section */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <MaterialCommunityIcons name="chart-line" size={20} color="#9C27B0" />
+              <Text style={styles.sectionLabel}>Air Quality Trends</Text>
+            </View>
+            
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tabButton, activeTab === 'daily' && styles.activeTab]}
+                onPress={() => setActiveTab('daily')}
+              >
+                <Text style={[styles.tabText, activeTab === 'daily' && styles.activeTabText]}>Daily</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tabButton, activeTab === 'weekly' && styles.activeTab]}
+                onPress={() => setActiveTab('weekly')}
+              >
+                <Text style={[styles.tabText, activeTab === 'weekly' && styles.activeTabText]}>Weekly</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tabButton, activeTab === 'monthly' && styles.activeTab]}
+                onPress={() => setActiveTab('monthly')}
+              >
+                <Text style={[styles.tabText, activeTab === 'monthly' && styles.activeTabText]}>Monthly</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <LineChart
+              data={getActiveData()}
+              width={width - 88}
+              height={220}
+              chartConfig={{
+                backgroundColor: '#ffffff',
+                backgroundGradientFrom: '#ffffff',
+                backgroundGradientTo: '#ffffff',
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                style: {
+                  borderRadius: 16
+                },
+                propsForDots: {
+                  r: "4",
+                  strokeWidth: "2",
+                  stroke: "#2196F3"
+                }
+              }}
+              bezier
+              style={{
+                marginVertical: 8,
+                borderRadius: 16
+              }}
+            />
+            
+            {/* Threshold markers */}
+            <View style={styles.thresholdContainer}>
+              <View style={styles.thresholdItem}>
+                <View style={[styles.thresholdDot, { backgroundColor: '#4CAF50' }]} />
+                <Text style={styles.thresholdText}>Excellent (50)</Text>
+              </View>
+              <View style={styles.thresholdItem}>
+                <View style={[styles.thresholdDot, { backgroundColor: '#FFC107' }]} />
+                <Text style={styles.thresholdText}>Moderate (100)</Text>
+              </View>
+              <View style={styles.thresholdItem}>
+                <View style={[styles.thresholdDot, { backgroundColor: '#F44336' }]} />
+                <Text style={styles.thresholdText}>Hazardous (150+)</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Event Logs */}
+          <View style={styles.sectionCard}>
+            <View style={[styles.sectionHeader, { justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons name="clipboard-list" size={20} color="#607D8B" />
+                <Text style={styles.sectionLabel}>Event Logs</Text>
+              </View>
+              <TouchableOpacity onPress={exportLogs}>
+                <MaterialCommunityIcons name="export" size={20} color="#607D8B" />
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.toggleLogsButton}
+              onPress={() => setShowLogs(!showLogs)}
+            >
+              <Text style={styles.toggleLogsText}>
+                {showLogs ? 'Hide Logs' : 'Show Logs'}
+              </Text>
+              <MaterialCommunityIcons 
+                name={showLogs ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#607D8B" 
+              />
+            </TouchableOpacity>
+            
+            {showLogs && (
+              <View style={styles.logsContainer}>
+                {eventLogs.map((log, index) => (
+                  <View key={index} style={styles.logItem}>
+                    <View style={[styles.logDot, { backgroundColor: getEventColor(log.level) }]} />
+                    <View style={styles.logContent}>
+                      <Text style={styles.logTime}>{log.time}</Text>
+                      <Text style={styles.logEvent}>{log.event}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </View>
       </View>
+      
       <Snackbar
-  visible={showNotification}
-  onDismiss={() => setShowNotification(false)}
-  duration={4000}
-  action={{
-    label: 'OK',
-    onPress: () => setShowNotification(false),
-  }}
-  style={{ backgroundColor: '#263238' }}
->
-  {notification}
-</Snackbar>
+        visible={showNotification}
+        onDismiss={() => setShowNotification(false)}
+        duration={4000}
+        action={{
+          label: 'OK',
+          onPress: () => setShowNotification(false),
+        }}
+        style={{ backgroundColor: '#263238' }}
+      >
+        {notification}
+      </Snackbar>
     </ScrollView>
   );
 }
@@ -496,12 +687,11 @@ const styles = StyleSheet.create({
     color: '#2196F3',
   },
   logoutButton: {
-  marginRight: 15,
-  padding: 8,
-  borderRadius: 20,
-  backgroundColor: '#ffe6e6',
-},
-
+    marginRight: 15,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#ffe6e6',
+  },
   filterStatusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -511,5 +701,90 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: '#4CAF50',
     fontWeight: '500',
+  },
+  // New styles for the added components
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 15,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 20,
+    padding: 4,
+  },
+  tabButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+  },
+  activeTab: {
+    backgroundColor: '#9C27B0',
+  },
+  tabText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  activeTabText: {
+    color: '#fff',
+  },
+  thresholdContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  thresholdItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  thresholdDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 5,
+  },
+  thresholdText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  toggleLogsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  toggleLogsText: {
+    color: '#607D8B',
+    fontWeight: '500',
+    marginRight: 5,
+  },
+  logsContainer: {
+    marginTop: 5,
+  },
+  logItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  logDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  logContent: {
+    flex: 1,
+  },
+  logTime: {
+    fontSize: 12,
+    color: '#999',
+  },
+  logEvent: {
+    fontSize: 14,
+    color: '#333',
+    marginTop: 2,
   },
 });
