@@ -39,22 +39,35 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     try {
-      const existingUser = await AsyncStorage.getItem(email);
+      const existingUser = await AsyncStorage.getItem(`user:${email}`);
       if (existingUser !== null) {
         Alert.alert('Error', 'User already exists!');
         return;
       }
 
-      // Storing user data including username and device name
-      const userData = { password, userName, deviceName };
-      await AsyncStorage.setItem(email, JSON.stringify(userData));
+      // Create initial log entry
+      const initialLog = {
+        time: new Date().toISOString(),
+        event: 'Account created',
+        level: 'info'
+      };
 
-      Alert.alert('Success', 'Account created successfully!');
-      // After successful signup
-navigation.navigate('MainApp', {
-  screen: 'Dashboard',
-  params: { email }
-});
+      // Storing user data including username, device name and initial log
+      const userData = { 
+        password, 
+        userName, 
+        deviceName,
+        logs: [initialLog] 
+      };
+      
+      await AsyncStorage.setItem(`user:${email}`, JSON.stringify(userData));
+
+      Alert.alert('Success', 'Account created successfully!', [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('Login'),
+        },
+      ]);
     } catch (error) {
       Alert.alert('Error', 'Failed to sign up');
       console.error(error);

@@ -24,57 +24,79 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
- const handleLogin = async () => {
-  if (!email || !password) {
-    Alert.alert('Error', 'Please fill in all fields');
-    return;
-  }
-
-  // Admin hardcoded check
-  if (email.toLowerCase() === 'admin' && password === '123') {
-    Alert.alert('Success', 'Admin logged in!', [
-      {
-        text: 'OK',
-        onPress: () => navigation.navigate('AdminScreen'),
-      },
-    ]);
-    return;
-  }
-
-  try {
-    const userData = await AsyncStorage.getItem(email);
-    if (userData === null) {
-      Alert.alert('Error', 'User not found!');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    const parsedData = JSON.parse(userData);
-    if (parsedData.password !== password) {
-      Alert.alert('Error', 'Incorrect password!');
+    // Admin hardcoded check
+    if (email.toLowerCase() === 'admin' && password === '123') {
+      // Create session for admin
+      const sessionData = {
+        lastActive: new Date().toISOString(),
+        isActive: true
+      };
+      await AsyncStorage.setItem(`session:admin`, JSON.stringify(sessionData));
+      
+      Alert.alert('Success', 'Admin logged in!', [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('AdminScreen'),
+        },
+      ]);
       return;
     }
 
-    Alert.alert('Success', 'Logged in successfully!', [
-      {
-        text: 'OK',
-        onPress: () =>
-          navigation.navigate('MainApp', {
-            screen: 'Dashboard',
-            params: {
-              email,
-              userName: parsedData.userName,
-              deviceName: parsedData.deviceName,
-            },
-          }),
-      },
-    ]);
-  } catch (error) {
-    Alert.alert('Error', 'Failed to login');
-    console.error(error);
-  }
-};
+    try {
+      const userData = await AsyncStorage.getItem(`user:${email}`);
+      if (userData === null) {
+        Alert.alert('Error', 'User not found!');
+        return;
+      }
 
+      const parsedData = JSON.parse(userData);
+      if (parsedData.password !== password) {
+        Alert.alert('Error', 'Incorrect password!');
+        return;
+      }
 
+      // Create session for regular user
+      const sessionData = {
+        lastActive: new Date().toISOString(),
+        isActive: true
+      };
+      await AsyncStorage.setItem(`session:${email}`, JSON.stringify(sessionData));
+
+      // Add login log entry
+      const logEntry = {
+        time: new Date().toISOString(),
+        event: 'User logged in',
+        level: 'info'
+      };
+      const updatedLogs = [logEntry, ...(parsedData.logs || [])];
+      await AsyncStorage.mergeItem(`user:${email}`, JSON.stringify({ logs: updatedLogs }));
+
+      Alert.alert('Success', 'Logged in successfully!', [
+        {
+          text: 'OK',
+          onPress: () =>
+            navigation.navigate('MainApp', {
+              screen: 'Dashboard',
+              params: {
+                email,
+                userName: parsedData.userName,
+                deviceName: parsedData.deviceName,
+              },
+            }),
+        },
+      ]);
+      
+    } catch (error) {
+      Alert.alert('Error', 'Failed to login');
+      console.error(error);
+    }
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: 'skyblue' }} contentContainerStyle={{ flexGrow: 1 }}>

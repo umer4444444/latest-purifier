@@ -12,11 +12,21 @@ import {
 } from 'react-native';
 import { ProgressBar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Snackbar } from 'react-native-paper';
 import { LineChart } from 'react-native-chart-kit';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+type RootStackParamList = {
+  Dashboard: {
+    email?: string;
+  };
+  // Add other screen params here if needed
+};
+
+type DashboardScreenRouteProp = RouteProp<RootStackParamList, 'Dashboard'>;
 
 const { width } = Dimensions.get('window');
 
@@ -70,11 +80,55 @@ export default function DashboardScreen() {
   const [notification, setNotification] = React.useState('');
   const [showNotification, setShowNotification] = React.useState(false);
   const [filterHealth, setFilterHealth] = React.useState(0.8);
-  const [activeTab, setActiveTab] = React.useState('daily'); // 'daily', 'weekly', 'monthly'
+  const [activeTab, setActiveTab] = React.useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [showLogs, setShowLogs] = React.useState(false);
-
-  const navigation = useNavigation<any>();
+  const [userEmail, setUserEmail] = React.useState('');
   const [airQuality, setAirQuality] = React.useState({ aqi: 42, status: 'Excellent' });
+
+  const navigation = useNavigation();
+  const route = useRoute<DashboardScreenRouteProp>();
+
+  const addLogEntry = async (event: string, level: string) => {
+  try {
+    const email = route.params?.email || '';
+    if (!email) return;
+    
+    const timestamp = new Date().toISOString();
+    const logEntry = { time: timestamp, event, level };
+    
+    // Store in user-specific logs
+    const userKey = `user:${email}`;
+    const userData = await AsyncStorage.getItem(userKey);
+    let logs = [];
+    
+    if (userData) {
+      const parsedData = JSON.parse(userData);
+      logs = parsedData.logs || [];
+    }
+    
+    const updatedLogs = [logEntry, ...logs].slice(0, 100);
+    await AsyncStorage.mergeItem(userKey, JSON.stringify({ logs: updatedLogs }));
+    
+    // Also store in global logs for admin
+    const adminLogsKey = `admin:logs`;
+    const adminLogsData = await AsyncStorage.getItem(adminLogsKey);
+    let allLogs = [];
+    
+    if (adminLogsData) {
+      allLogs = JSON.parse(adminLogsData);
+    }
+    
+    const updatedAdminLogs = [{
+      email,
+      ...logEntry
+    }, ...allLogs].slice(0, 500); // Keep last 500 entries
+    
+    await AsyncStorage.setItem(adminLogsKey, JSON.stringify(updatedAdminLogs));
+    
+  } catch (error) {
+    console.error('Error saving log:', error);
+  }
+};
 
   const getAqiStatus = (aqi: number): string => {
     if (aqi < 50) return 'Excellent';
@@ -82,6 +136,11 @@ export default function DashboardScreen() {
     if (aqi < 150) return 'Unhealthy';
     return 'Hazardous';
   };
+
+  React.useEffect(() => {
+    const email = route.params?.email || '';
+    setUserEmail(email);
+  }, [route.params]);
 
   React.useEffect(() => {
     const interval = setInterval(() => {
@@ -226,9 +285,9 @@ export default function DashboardScreen() {
             <TouchableOpacity
               style={styles.logoutButton}
               onPress={() => navigation.reset({
-                index: 0,
-                routes: [{ name: 'Auth' }]
-              })}
+  index: 0,
+  routes: [{ name: "Auth" as never }]
+})}
             >
               <MaterialCommunityIcons name="logout" size={22} color="#F44336" />
             </TouchableOpacity>

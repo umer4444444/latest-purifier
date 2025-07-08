@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TouchableOpacity,
+  RefreshControl 
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -7,192 +14,170 @@ interface User {
   email: string;
   userName?: string;
   deviceName?: string;
-  logs?: AirQualityLog[];
+  logs?: Array<{
+    time: string;
+    event: string;
+    level: string;
+  }>;
   isLoggedIn?: boolean;
   lastActive?: string;
-}
-
-interface AirQualityLog {
-  timestamp: string;
-  aqi: number;
-  status: string;
-  action?: string;
 }
 
 const AdminScreen = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
-  const [activeUsers, setActiveUsers] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const fetchUsersAndSessions = async () => {
-      // Get all registered users
-      const keys = await AsyncStorage.getAllKeys();
-      const usersData: User[] = [];
-      const activeUsersList: string[] = [];
+// In AdminScreen.tsx
+const fetchUsers = async () => {
+  try {
+    setRefreshing(true);
+    const keys = await AsyncStorage.getAllKeys();
+    const usersData: User[] = [];
 
-      for (const key of keys) {
-        if (key.startsWith('user:')) {
-          const userData = await AsyncStorage.getItem(key);
-          if (userData) {
-            const parsedData = JSON.parse(userData);
-            const userEmail = key.replace('user:', '');
-            
-            // Check if user has an active session
-            const sessionKey = `session:${userEmail}`;
-            const sessionData = await AsyncStorage.getItem(sessionKey);
-            const isLoggedIn = !!sessionData;
-            
-            if (isLoggedIn) {
-              activeUsersList.push(userEmail);
-            }
-
-            usersData.push({ 
-              email: userEmail,
-              userName: parsedData.userName,
-              deviceName: parsedData.deviceName,
-              logs: parsedData.logs || [],
-              isLoggedIn,
-              lastActive: sessionData ? JSON.parse(sessionData).lastActive : undefined
-            });
-          }
+    // First get all users
+    for (const key of keys) {
+      if (key.startsWith('user:')) {
+        const userEmail = key.replace('user:', '');
+        const userData = await AsyncStorage.getItem(key);
+        
+        if (userData) {
+          const parsedData = JSON.parse(userData);
+          
+          // Check if user has an active session
+          const sessionKey = `session:${userEmail}`;
+          const sessionData = await AsyncStorage.getItem(sessionKey);
+          
+          usersData.push({
+            email: userEmail,
+            userName: parsedData.userName,
+            deviceName: parsedData.deviceName,
+            logs: parsedData.logs || [],
+            isLoggedIn: !!sessionData,
+            lastActive: sessionData ? JSON.parse(sessionData).lastActive : undefined
+          });
         }
       }
+    }
 
-      setUsers(usersData);
-      setActiveUsers(activeUsersList);
-    };
+    // Then get all admin logs
+    const adminLogsKey = `admin:logs`;
+    const adminLogsData = await AsyncStorage.getItem(adminLogsKey);
+    const allLogs = adminLogsData ? JSON.parse(adminLogsData) : [];
 
-    fetchUsersAndSessions();
-    
-    // Refresh every 30 seconds to get current active users
-    const interval = setInterval(fetchUsersAndSessions, 30000);
-    return () => clearInterval(interval);
+    // Merge logs into users
+    const usersWithLogs = usersData.map(user => {
+      const userLogs = allLogs.filter((log: any) => log.email === user.email);
+      return {
+        ...user,
+        allLogs: [...(user.logs || []), ...userLogs].sort((a, b) => 
+          new Date(b.time).getTime() - new Date(a.time).getTime()
+        )
+      };
+    });
+
+    setUsers(usersWithLogs);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+  } finally {
+    setRefreshing(false);
+  }
+};
+
+  useEffect(() => {
+    fetchUsers();
   }, []);
 
-  const toggleUserExpansion = (email: string) => {
-    setExpandedUser(expandedUser === email ? null : email);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'excellent': return '#4CAF50';
-      case 'moderate': return '#FFC107';
-      case 'unhealthy': return '#FF9800';
-      case 'hazardous': return '#F44336';
-      default: return '#9E9E9E';
+  const getEventColor = (level: string) => {
+    switch (level.toLowerCase()) {
+      case 'high': return '#F44336';
+      case 'medium': return '#FF9800';
+      case 'info': return '#2196F3';
+      default: return '#4CAF50';
     }
   };
 
-  return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.header}>Registered Users</Text>
-      
-      {/* Active Users Section */}
-      {activeUsers.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Currently Active ({activeUsers.length})</Text>
-          {users
-            .filter(user => activeUsers.includes(user.email))
-            .map(user => (
-              <View key={`active-${user.email}`} style={[styles.userItem, styles.activeUser]}>
-                <View style={styles.userHeader}>
-                  <View>
-                    <Text style={styles.userText}>
-                      <MaterialCommunityIcons name="account" size={16} color="#4CAF50" /> {user.email}
-                    </Text>
-                    {user.userName && <Text style={styles.userDetail}>Name: {user.userName}</Text>}
-                    {user.lastActive && <Text style={styles.userDetail}>Active since: {new Date(user.lastActive).toLocaleString()}</Text>}
-                  </View>
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>ONLINE</Text>
-                  </View>
-                </View>
-              </View>
-            ))
-          }
-        </View>
-      )}
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
 
-      {/* All Users Section */}
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={fetchUsers} />
+      }
+    >
+      <Text style={styles.header}>User Management</Text>
+      
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>All Users ({users.length})</Text>
-        {users.length > 0 ? (
+        
+        {users.length === 0 ? (
+          <Text style={styles.noUsers}>No users found</Text>
+        ) : (
           users.map((user) => (
             <View 
               key={user.email} 
               style={[
-                styles.userItem, 
-                activeUsers.includes(user.email) && styles.activeUserItem
+                styles.userCard,
+                user.isLoggedIn && styles.activeUserCard
               ]}
             >
-              <TouchableOpacity 
-                onPress={() => toggleUserExpansion(user.email)}
+              <TouchableOpacity
                 style={styles.userHeader}
+                onPress={() => setExpandedUser(expandedUser === user.email ? null : user.email)}
               >
-                <View>
-                  <Text style={styles.userText}>
-                    {user.email === 'umeramin577@gmail.com' && (
-                      <MaterialCommunityIcons name="star" size={16} color="#FFC107" />
+                <View style={styles.userInfo}>
+                  <Text style={styles.userEmail}>
+                    {user.email === 'admin' && (
+                      <MaterialCommunityIcons name="shield-account" size={16} color="#FFC107" />
                     )}
-                    {user.email}
+                    {' '}{user.email}
                   </Text>
                   {user.userName && <Text style={styles.userDetail}>Name: {user.userName}</Text>}
                   {user.deviceName && <Text style={styles.userDetail}>Device: {user.deviceName}</Text>}
                 </View>
+                
                 <View style={styles.userStatus}>
                   {user.isLoggedIn ? (
-                    <View style={styles.activeIndicator}>
-                      <View style={styles.activePulse} />
-                      <Text style={styles.activeText}>Active</Text>
+                    <View style={styles.activeStatus}>
+                      <View style={styles.activeDot} />
+                      <Text style={styles.activeText}>Online</Text>
                     </View>
                   ) : (
                     <Text style={styles.inactiveText}>Offline</Text>
                   )}
                   <MaterialCommunityIcons 
-                    name={expandedUser === user.email ? "chevron-up" : "chevron-down"} 
+                    name={expandedUser === user.email ? 'chevron-up' : 'chevron-down'} 
                     size={24} 
-                    color="white" 
+                    color="#666" 
                   />
                 </View>
               </TouchableOpacity>
 
               {expandedUser === user.email && (
                 <View style={styles.logsContainer}>
-                  <Text style={styles.logsHeader}>Activity Logs ({user.logs?.length || 0})</Text>
+                  <Text style={styles.logsTitle}>Activity Logs ({user.logs?.length || 0})</Text>
                   
                   {user.logs && user.logs.length > 0 ? (
                     user.logs.map((log, index) => (
                       <View key={index} style={styles.logItem}>
-                        <View style={styles.logTimestamp}>
-                          <Text style={styles.logText}>{new Date(log.timestamp).toLocaleString()}</Text>
-                          {log.action && (
-                            <MaterialCommunityIcons 
-                              name={log.action.includes('on') ? 'power' : 'alert-circle'} 
-                              size={16} 
-                              color="#2196F3" 
-                            />
-                          )}
+                        <View style={styles.logTimeContainer}>
+                          <Text style={styles.logTime}>{formatDate(log.time)}</Text>
+                          <View style={[styles.logLevel, { backgroundColor: getEventColor(log.level) }]} />
                         </View>
-                        <View style={styles.logData}>
-                          <Text style={[styles.logText, { color: getStatusColor(log.status) }]}>
-                            AQI: {log.aqi} ({log.status})
-                          </Text>
-                          {log.action && (
-                            <Text style={styles.logAction}>{log.action}</Text>
-                          )}
-                        </View>
+                        <Text style={styles.logEvent}>{log.event}</Text>
                       </View>
                     ))
                   ) : (
-                    <Text style={styles.noLogs}>No activity data available</Text>
+                    <Text style={styles.noLogs}>No activity logs available</Text>
                   )}
                 </View>
               )}
             </View>
           ))
-        ) : (
-          <Text style={styles.noUsers}>No users registered yet.</Text>
         )}
       </View>
     </ScrollView>
@@ -202,37 +187,41 @@ const AdminScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'black',
-    padding: 20,
+    backgroundColor: '#f5f5f5',
+    padding: 16,
   },
   header: {
     fontSize: 24,
-    color: 'white',
     fontWeight: 'bold',
     marginBottom: 20,
-    marginTop: 30,
+    color: '#333',
   },
   section: {
-    marginBottom: 25,
+    marginBottom: 20,
   },
   sectionTitle: {
-    color: '#2196F3',
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+    color: '#555',
   },
-  userItem: {
-    backgroundColor: '#333',
-    padding: 15,
+  noUsers: {
+    textAlign: 'center',
+    color: '#777',
+    marginTop: 20,
+  },
+  userCard: {
+    backgroundColor: '#fff',
     borderRadius: 8,
-    marginBottom: 10,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  activeUserItem: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
-  },
-  activeUser: {
-    backgroundColor: '#1a2e22',
+  activeUserCard: {
     borderLeftWidth: 4,
     borderLeftColor: '#4CAF50',
   },
@@ -241,31 +230,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  userInfo: {
+    flex: 1,
+  },
+  userEmail: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  userDetail: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 2,
+  },
   userStatus: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  userText: {
-    color: 'white',
-    fontSize: 16,
-    marginBottom: 3,
-  },
-  userDetail: {
-    color: '#aaa',
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  activeIndicator: {
+  activeStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 10,
   },
-  activePulse: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  activeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#4CAF50',
-    marginRight: 5,
+    marginRight: 6,
   },
   activeText: {
     color: '#4CAF50',
@@ -276,66 +269,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginRight: 10,
   },
-  activeBadge: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  activeBadgeText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   logsContainer: {
-    marginTop: 15,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#555',
-    paddingTop: 10,
+    borderTopColor: '#eee',
   },
-  logsHeader: {
-    color: '#2196F3',
+  logsTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
   },
   logItem: {
-    backgroundColor: '#222',
-    padding: 10,
-    borderRadius: 5,
+    backgroundColor: '#f9f9f9',
+    padding: 12,
+    borderRadius: 6,
     marginBottom: 8,
+  },
+  logTimeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  logTimestamp: {
-    flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  logData: {
-    alignItems: 'flex-end',
-  },
-  logText: {
-    color: 'white',
-    fontSize: 14,
-    marginRight: 5,
-  },
-  logAction: {
-    color: '#2196F3',
+  logTime: {
     fontSize: 12,
-    marginTop: 3,
-    fontStyle: 'italic',
+    color: '#666',
+  },
+  logLevel: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  logEvent: {
+    fontSize: 14,
+    color: '#333',
   },
   noLogs: {
+    textAlign: 'center',
     color: '#777',
-    fontSize: 14,
-    textAlign: 'center',
-    padding: 10,
-  },
-  noUsers: {
-    color: 'white',
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 20,
+    padding: 12,
   },
 });
 
